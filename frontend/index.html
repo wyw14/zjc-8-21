@@ -44,28 +44,44 @@
 
       <main class="content">
         <div class="stats-header">
-          <h2 class="section-title">📊 月度统计</h2>
-          <div class="stats-selector">
-            <select v-model="selectedYear" @change="onMonthChange">
-              <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
-            </select>
-            <select v-model="selectedMonth" @change="onMonthChange">
-              <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
-            </select>
+          <h2 class="section-title">📊 统计面板</h2>
+          <div class="stats-header-actions">
+            <div class="stats-selector">
+              <select v-model="selectedYear" @change="onMonthChange">
+                <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}年</option>
+              </select>
+              <select v-model="selectedMonth" @change="onMonthChange">
+                <option v-for="m in 12" :key="m" :value="m">{{ m }}月</option>
+              </select>
+            </div>
+            <button class="btn-icon" @click="showStatsSettings = !showStatsSettings" :class="{ active: showStatsSettings }">
+              ⚙️ 自定义
+            </button>
           </div>
         </div>
-        <div class="stats-section">
-          <div class="stat-card">
-            <div class="stat-number">{{ monthlyStats.count }}</div>
-            <div class="stat-label">{{ selectedMonth }}月梦境数</div>
+
+        <div v-if="showStatsSettings" class="stats-settings">
+          <div class="stats-settings-title">选择要显示的统计指标</div>
+          <div class="stats-settings-options">
+            <label
+              v-for="indicator in statIndicators"
+              :key="indicator.key"
+              class="stats-settings-item"
+              :class="{ selected: isIndicatorSelected(indicator.key) }"
+              @click="toggleIndicator(indicator.key)"
+            >
+              <span class="stats-settings-icon">{{ indicator.icon }}</span>
+              <span class="stats-settings-label">{{ indicator.label }}</span>
+              <span class="stats-settings-check">{{ isIndicatorSelected(indicator.key) ? '✓' : '' }}</span>
+            </label>
           </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ monthlyStats.avgLucidity }}</div>
-            <div class="stat-label">平均清醒度</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-number">{{ dreams.length }}</div>
-            <div class="stat-label">总记录数</div>
+        </div>
+
+        <div class="stats-section" :style="{ gridTemplateColumns: 'repeat(' + Math.min(visibleStats.length, 5) + ', 1fr)' }">
+          <div v-for="stat in visibleStats" :key="stat.key" class="stat-card">
+            <div class="stat-icon">{{ stat.icon }}</div>
+            <div class="stat-number">{{ getStatValue(stat.key) }}</div>
+            <div class="stat-label">{{ stat.label }}</div>
           </div>
         </div>
 
@@ -113,18 +129,47 @@
           </div>
         </div>
 
-        <div class="card">
-          <h2>📚 梦境列表</h2>
-          <div v-if="dreams.length === 0" class="empty-dream">还没有记录梦境</div>
-          <div v-else class="dream-list">
-            <div v-for="dream in dreams" :key="dream.id" class="dream-item">
-              <div class="dream-header">
-                <span class="dream-date">{{ dream.date }}</span>
-                <span class="dream-lucidity">
-                  <span v-for="n in 5" :key="n" class="star">{{ n <= dream.lucidity ? '★' : '☆' }}</span>
-                </span>
+        <div class="two-columns">
+          <div class="card">
+            <h2>📚 梦境列表</h2>
+            <div v-if="dreams.length === 0" class="empty-dream">还没有记录梦境</div>
+            <div v-else class="dream-list">
+              <div v-for="dream in dreams" :key="dream.id" class="dream-item">
+                <div class="dream-header">
+                  <span class="dream-date">{{ dream.date }}</span>
+                  <div class="dream-header-right">
+                    <span class="dream-lucidity">
+                      <span v-for="n in 5" :key="n" class="star">{{ n <= dream.lucidity ? '★' : '☆' }}</span>
+                    </span>
+                    <span class="dream-favorite" @click="toggleFavorite(dream)" :class="{ active: dream.favorite }">
+                      {{ dream.favorite ? '★' : '☆' }}
+                    </span>
+                  </div>
+                </div>
+                <div class="dream-text">{{ dream.content }}</div>
               </div>
-              <div class="dream-text">{{ dream.content }}</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>✅ 任务列表</h2>
+            <div class="task-input-row">
+              <input
+                v-model="newTaskContent"
+                type="text"
+                placeholder="添加新任务..."
+                @keyup.enter="addTask"
+                class="task-input"
+              >
+              <button class="btn-primary btn-task-add" @click="addTask">添加</button>
+            </div>
+            <div v-if="tasks.length === 0" class="empty-dream">还没有任务</div>
+            <div v-else class="task-list">
+              <div v-for="task in tasks" :key="task.id" class="task-item" :class="{ done: task.done }">
+                <span class="task-checkbox" @click="toggleTaskDone(task)">{{ task.done ? '☑' : '☐' }}</span>
+                <span class="task-content">{{ task.content }}</span>
+                <span class="task-delete" @click="deleteTask(task.id)">✕</span>
+              </div>
             </div>
           </div>
         </div>

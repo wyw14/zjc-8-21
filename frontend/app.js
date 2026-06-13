@@ -1,6 +1,16 @@
-const { createApp, ref, onMounted, computed } = Vue;
+const { createApp, ref, onMounted, computed, watch } = Vue;
 
 const API_BASE = 'http://localhost:3121/api';
+
+const STAT_INDICATORS = [
+  { key: 'monthlyCount', label: '本月记录数', icon: '📅' },
+  { key: 'avgLucidity', label: '平均清醒度', icon: '👁️' },
+  { key: 'streakDays', label: '连续记录天数', icon: '🔥' },
+  { key: 'favoriteCount', label: '收藏数', icon: '⭐' },
+  { key: 'taskCount', label: '任务数', icon: '✅' }
+];
+
+const DEFAULT_SELECTED = ['monthlyCount', 'avgLucidity', 'streakDays', 'favoriteCount', 'taskCount'];
 
 createApp({
   setup() {
@@ -15,6 +25,20 @@ createApp({
     const dreams = ref([]);
     const randomDream = ref(null);
     const monthlyStats = ref({ count: 0, avgLucidity: 0 });
+
+    const summaryStats = ref({
+      monthlyCount: 0,
+      avgLucidity: 0,
+      streakDays: 0,
+      favoriteCount: 0,
+      taskCount: 0
+    });
+
+    const selectedIndicators = ref([...DEFAULT_SELECTED]);
+    const showStatsSettings = ref(false);
+
+    const tasks = ref([]);
+    const newTaskContent = ref('');
 
     const now = new Date();
     const selectedYear = ref(now.getFullYear());
@@ -38,6 +62,12 @@ createApp({
     let audioContext = null;
     let noiseNode = null;
     let gainNode = null;
+
+    const statIndicators = STAT_INDICATORS;
+
+    const visibleStats = computed(() => {
+      return STAT_INDICATORS.filter(s => selectedIndicators.value.includes(s.key));
+    });
 
     function getToken() {
       return localStorage.getItem('dream_token');
@@ -64,6 +94,41 @@ createApp({
         user.value = JSON.parse(saved);
         isLoggedIn.value = true;
       }
+    }
+
+    function loadSelectedIndicators() {
+      const saved = localStorage.getItem('dream_stat_indicators');
+      if (saved) {
+        try {
+          selectedIndicators.value = JSON.parse(saved);
+        } catch (e) {
+          selectedIndicators.value = [...DEFAULT_SELECTED];
+        }
+      }
+    }
+
+    function saveSelectedIndicators() {
+      localStorage.setItem('dream_stat_indicators', JSON.stringify(selectedIndicators.value));
+    }
+
+    function toggleIndicator(key) {
+      const idx = selectedIndicators.value.indexOf(key);
+      if (idx >= 0) {
+        if (selectedIndicators.value.length > 1) {
+          selectedIndicators.value.splice(idx, 1);
+        }
+      } else {
+        selectedIndicators.value.push(key);
+      }
+      saveSelectedIndicators();
+    }
+
+    function isIndicatorSelected(key) {
+      return selectedIndicators.value.includes(key);
+    }
+
+    function getStatValue(key) {
+      return summaryStats.value[key] ?? 0;
     }
 
     async function apiRequest(url, options = {}) {
@@ -125,6 +190,7 @@ createApp({
       user.value = null;
       dreams.value = [];
       randomDream.value = null;
+      tasks.value = [];
     }
 
     async function fetchDreams() {
@@ -160,6 +226,71 @@ createApp({
       }
     }
 
+    async function fetchSummaryStats() {
+      try {
+        const data = await apiRequest('/stats/summary');
+        summaryStats.value = data;
+      } catch (e) {
+        console.error('获取统计摘要失败', e);
+      }
+    }
+
+    async function toggleFavorite(dream) {
+      try {
+        await apiRequest(`/dreams/${dream.id}/favorite`, { method: 'PATCH' });
+        dream.favorite = !dream.favorite;
+        fetchSummaryStats();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function fetchTasks() {
+      try {
+        const data = await apiRequest('/tasks');
+        tasks.value = data;
+      } catch (e) {
+        console.error('获取任务列表失败', e);
+      }
+    }
+
+    async function addTask() {
+      if (!newTaskContent.value.trim()) return;
+      try {
+        await apiRequest('/tasks', {
+          method: 'POST',
+          body: JSON.stringify({ content: newTaskContent.value.trim() })
+        });
+        newTaskContent.value = '';
+        fetchTasks();
+        fetchSummaryStats();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function toggleTaskDone(task) {
+      try {
+        await apiRequest(`/tasks/${task.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ done: !task.done })
+        });
+        task.done = !task.done;
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function deleteTask(taskId) {
+      try {
+        await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
+        tasks.value = tasks.value.filter(t => t.id !== taskId);
+        fetchSummaryStats();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
     function onMonthChange() {
       fetchMonthlyStats();
     }
@@ -191,6 +322,8 @@ createApp({
     function loadData() {
       fetchDreams();
       fetchMonthlyStats();
+      fetchSummaryStats();
+      fetchTasks();
     }
 
     function createWhiteNoise() {
@@ -252,6 +385,7 @@ createApp({
 
     onMounted(() => {
       loadUser();
+      loadSelectedIndicators();
       if (isLoggedIn.value) {
         loadData();
       }
@@ -268,6 +402,7 @@ createApp({
       dreams,
       randomDream,
       monthlyStats,
+      summaryStats,
       newDream,
       fetchRandomDream,
       addDream,
@@ -276,7 +411,20 @@ createApp({
       selectedYear,
       selectedMonth,
       yearOptions,
-      onMonthChange
+      onMonthChange,
+      statIndicators,
+      selectedIndicators,
+      showStatsSettings,
+      visibleStats,
+      toggleIndicator,
+      isIndicatorSelected,
+      getStatValue,
+      toggleFavorite,
+      tasks,
+      newTaskContent,
+      addTask,
+      toggleTaskDone,
+      deleteTask
     };
   }
 }).mount('#app');
